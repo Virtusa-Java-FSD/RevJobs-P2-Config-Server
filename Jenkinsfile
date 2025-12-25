@@ -33,12 +33,8 @@ pipeline {
                      // Note: You should ideally use a systemctl service or docker container.
                      // For now, we assume simple java -jar execution.
                      // We use pkill to kill the specific jar.
-                     try {
-                         // Attempt to kill; ignore error if not found
-                         bat "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'pkill -f config-server || true'"
-                     } catch (Exception e) {
-                         echo 'No existing process found or failed to kill'
-                     }
+                     // Attempt to kill; ignore error if not found
+                     bat "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'pkill -f config-server || true'"
 
                      // 2. Create directory if not exists
                      bat "ssh -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_DIR}'"
