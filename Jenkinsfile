@@ -27,21 +27,35 @@ pipeline {
         }
 
         stage('Deploy to EC2') {
-            steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-                     // 1. Stop existing service
-                     bat "ssh -i \"${SSH_KEY}\" -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'pkill -f config-server || true'"
+                    powershell '''
+                        # 1. Fix Key Permissions (Critical for Windows OpenSSH)
+                        $keyPath = $env:SSH_KEY
+                        $acl = Get-Acl $keyPath
+                        $acl.SetAccessRuleProtection($true, $false) # Disable inheritance, remove existing rules
+                        $currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+                        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($currentUser, "FullControl", "Allow")
+                        $acl.SetAccessRule($rule)
+                        Set-Acl $keyPath $acl
 
-                     // 2. Create directory if not exists
-                     bat "ssh -i \"${SSH_KEY}\" -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'mkdir -p ${REMOTE_DIR}'"
+                        # 2. Deployment Steps
+                        $remote = "$env:REMOTE_USER@$env:REMOTE_HOST"
+                        
+                        # Stop existing service (ignoring errors)
+                        ssh -i $keyPath -o StrictHostKeyChecking=no $remote "pkill -f config-server; exit 0"
 
-                     // 3. Upload new JAR
-                     bat "scp -i \"${SSH_KEY}\" -o StrictHostKeyChecking=no target/*.jar ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/config-server.jar"
+                        # Create directory
+                        ssh -i $keyPath -o StrictHostKeyChecking=no $remote "mkdir -p $env:REMOTE_DIR"
 
-                     // 4. Start Service in Background
-                     bat "ssh -i \"${SSH_KEY}\" -o StrictHostKeyChecking=no ${REMOTE_USER}@${REMOTE_HOST} 'nohup java -jar ${REMOTE_DIR}/config-server.jar > ${REMOTE_DIR}/log.txt 2>&1 &'"
+                        # Upload JAR
+                        # Note: Resolving wildcard in PowerShell before passing to scp
+                        $jarFile = Get-Item "target/*.jar"
+                        scp -i $keyPath -o StrictHostKeyChecking=no $jarFile $remote":"$env:REMOTE_DIR/config-server.jar
+
+                        # Start Service
+                        ssh -i $keyPath -o StrictHostKeyChecking=no $remote "nohup java -jar $env:REMOTE_DIR/config-server.jar > $env:REMOTE_DIR/log.txt 2>&1 &"
+                    '''
                 }
-            }
         }
     }
 }
