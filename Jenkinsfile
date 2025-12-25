@@ -27,6 +27,7 @@ pipeline {
         }
 
         stage('Deploy to EC2') {
+            steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY')]) {
                     powershell '''
                         # 1. Fix Key Permissions (Critical for Windows OpenSSH)
@@ -48,7 +49,6 @@ pipeline {
                         ssh -i $keyPath -o StrictHostKeyChecking=no $remote "mkdir -p $env:REMOTE_DIR"
 
                         # Upload JAR
-                        # Note: Resolving wildcard in PowerShell before passing to scp
                         $jarFile = Get-Item "target/*.jar"
                         scp -i $keyPath -o StrictHostKeyChecking=no $jarFile $remote":"$env:REMOTE_DIR/config-server.jar
 
@@ -56,6 +56,7 @@ pipeline {
                         ssh -i $keyPath -o StrictHostKeyChecking=no $remote "nohup java -jar $env:REMOTE_DIR/config-server.jar > $env:REMOTE_DIR/log.txt 2>&1 &"
                     '''
                 }
+            }
         }
     }
 }
