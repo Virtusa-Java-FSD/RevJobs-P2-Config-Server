@@ -30,7 +30,10 @@ pipeline {
             steps {
                 withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY')]) {
                     powershell '''
+                        Write-Host "Starting deployment..."
+                        
                         # 1. Fix Key Permissions (Critical for Windows OpenSSH)
+                        Write-Host "Setting key permissions..."
                         $keyPath = $env:SSH_KEY
                         $acl = Get-Acl $keyPath
                         $acl.SetAccessRuleProtection($true, $false) # Disable inheritance, remove existing rules
@@ -38,22 +41,30 @@ pipeline {
                         $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($currentUser, "FullControl", "Allow")
                         $acl.SetAccessRule($rule)
                         Set-Acl $keyPath $acl
+                        Write-Host "Key permissions set successfully"
 
                         # 2. Deployment Steps
                         $remote = "$env:REMOTE_USER@$env:REMOTE_HOST"
+                        Write-Host "Deploying to $remote"
                         
                         # Stop existing service (ignoring errors)
-                        ssh -i $keyPath -o StrictHostKeyChecking=no $remote "pkill -f config-server; exit 0"
+                        Write-Host "Stopping existing service..."
+                        ssh -i $keyPath -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no $remote "pkill -f config-server; exit 0"
 
                         # Create directory
-                        ssh -i $keyPath -o StrictHostKeyChecking=no $remote "mkdir -p $env:REMOTE_DIR"
+                        Write-Host "Creating directory..."
+                        ssh -i $keyPath -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no $remote "mkdir -p $env:REMOTE_DIR"
 
                         # Upload JAR
+                        Write-Host "Uploading JAR file..."
                         $jarFile = Get-Item "target/*.jar"
-                        scp -i $keyPath -o StrictHostKeyChecking=no $jarFile $remote":"$env:REMOTE_DIR/config-server.jar
+                        scp -i $keyPath -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no $jarFile $remote":"$env:REMOTE_DIR/config-server.jar
 
                         # Start Service
-                        ssh -i $keyPath -o StrictHostKeyChecking=no $remote "nohup java -jar $env:REMOTE_DIR/config-server.jar > $env:REMOTE_DIR/log.txt 2>&1 &"
+                        Write-Host "Starting service..."
+                        ssh -i $keyPath -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=no $remote "nohup java -jar $env:REMOTE_DIR/config-server.jar > $env:REMOTE_DIR/log.txt 2>&1 &"
+                        
+                        Write-Host "Deployment complete!"
                     '''
                 }
             }
