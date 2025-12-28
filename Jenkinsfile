@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         REMOTE_HOST = "${env.EC2_INFRA_IP}"
         REMOTE_USER = "ec2-user"
